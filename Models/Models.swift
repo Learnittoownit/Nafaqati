@@ -211,3 +211,4 @@ struct InviteCode: Codable, Identifiable {
         case isUsed    = "is_used"
     }
 }
+
