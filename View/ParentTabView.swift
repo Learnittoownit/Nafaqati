@@ -37,6 +37,7 @@ struct ParentTabView: View {
 
             ChildrenView()
                 .environmentObject(parentVM)
+                .environmentObject(authVM)
                 .tabItem { Label("Children", systemImage: "person.2.fill") }
                 .tag(2)
 
