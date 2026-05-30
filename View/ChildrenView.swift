@@ -319,29 +319,68 @@ struct RecentActivitySheet: View {
     let child: ChildProfile
     let jars: [Jar]
 
+    @State private var activities: [ParentActivityRow] = []
+    @State private var isLoading = true
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Capsule().fill(Color.nafTextGray.opacity(0.3)).frame(width: 40, height: 4).frame(maxWidth: .infinity).padding(.top, 12).padding(.bottom, 20)
+            Capsule()
+                .fill(Color.nafTextGray.opacity(0.3))
+                .frame(width: 40, height: 4)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("RECENT ACTIVITY").font(.system(size: 11, weight: .bold)).foregroundColor(Color(hex: "2D6DAB")).tracking(1.2)
-                Text(child.name).font(.system(size: 22, weight: .bold)).foregroundColor(Color(hex: "1B3A6B"))
+                Text("RECENT ACTIVITY")
+                    .font(.system(
+                        size: 11,
+                        weight: .bold,
+                        design: .rounded))
+                    .foregroundColor(Color(hex: "2D6DAB"))
+                    .tracking(1.2)
+                Text(child.name)
+                    .font(.system(
+                        size: 22,
+                        weight: .bold))
+                    .foregroundColor(Color(hex: "1B3A6B"))
             }
-            .padding(.horizontal, 20).padding(.bottom, 16)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
 
             Divider()
 
+            // Jar balances row
             HStack(spacing: 0) {
                 ForEach([
-                    ("Saving",   jars.first(where: { $0.type == .saving   })?.balance ?? 0, Color(hex: "F5A623")),
-                    ("Giving",   jars.first(where: { $0.type == .giving   })?.balance ?? 0, Color(hex: "4CAF82")),
-                    ("Spending", jars.first(where: { $0.type == .spending })?.balance ?? 0, Color(hex: "E05A5A"))
+                    ("Saving",
+                     jars.first(where: {
+                         $0.type == .saving
+                     })?.balance ?? 0,
+                     Color(hex: "F5A623")),
+                    ("Giving",
+                     jars.first(where: {
+                         $0.type == .giving
+                     })?.balance ?? 0,
+                     Color(hex: "4CAF82")),
+                    ("Spending",
+                     jars.first(where: {
+                         $0.type == .spending
+                     })?.balance ?? 0,
+                     Color(hex: "E05A5A"))
                 ], id: \.0) { label, amount, color in
                     VStack(spacing: 4) {
-                        Text(label).font(.system(size: 11)).foregroundColor(.nafTextGray)
-                        Text("\(Int(amount)) SAR").font(.system(size: 15, weight: .bold)).foregroundColor(color)
+                        Text(label)
+                            .font(.system(size: 11))
+                            .foregroundColor(.nafTextGray)
+                        Text("\(Int(amount)) SAR")
+                            .font(.system(
+                                size: 15,
+                                weight: .bold))
+                            .foregroundColor(color)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
                     if label != "Spending" { Divider() }
                 }
             }
@@ -349,24 +388,134 @@ struct RecentActivitySheet: View {
 
             Divider()
 
-            VStack(spacing: 12) {
-                Image(systemName: "clock.arrow.circlepath").font(.system(size: 36)).foregroundColor(Color(hex: "2D6DAB").opacity(0.3))
-                Text("No recent activity yet").font(.system(size: 15, weight: .medium)).foregroundColor(.nafTextGray)
-                Text("Activity will appear here once\n\(child.name) starts using the app.")
-                    .font(.system(size: 13)).foregroundColor(.nafTextGray.opacity(0.8)).multilineTextAlignment(.center)
+            // Activity list
+            if isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 40)
+            } else if activities.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName:
+                        "clock.arrow.circlepath")
+                        .font(.system(size: 36))
+                        .foregroundColor(
+                            Color(hex: "2D6DAB").opacity(0.3))
+                    Text("No recent activity yet")
+                        .font(.system(
+                            size: 15,
+                            weight: .medium))
+                        .foregroundColor(.nafTextGray)
+                    Text("Activity will appear here once\n\(child.name) starts using the app.")
+                        .font(.system(size: 13))
+                        .foregroundColor(
+                            .nafTextGray.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(activities) { item in
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color(
+                                            hex: "EBF4FF"))
+                                        .frame(
+                                            width: 36,
+                                            height: 36)
+                                    Image(systemName:
+                                        iconFor(item.title))
+                                        .font(.system(
+                                            size: 14))
+                                        .foregroundColor(
+                                            Color(hex: "2D6DAB"))
+                                }
+                                VStack(alignment: .leading,
+                                       spacing: 3) {
+                                    Text(item.title)
+                                        .font(.system(
+                                            size: 13,
+                                            weight: .medium))
+                                        .foregroundColor(
+                                            Color(hex: "1B3A6B"))
+                                    Text(timeAgo(
+                                        item.createdAt
+                                        ?? Date()))
+                                        .font(.system(
+                                            size: 11))
+                                        .foregroundColor(
+                                            .nafTextGray)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            Divider()
+                                .padding(.leading, 68)
+                        }
+                    }
+                }
             }
-            .frame(maxWidth: .infinity).padding(.top, 50)
 
             Spacer()
         }
         .background(Color.white)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
+        .task { await fetchActivity() }
     }
-}
 
-#Preview {
-    ChildrenView()
-        .environmentObject(AuthViewModel())
-        .environmentObject(ParentViewModel())
+    func fetchActivity() async {
+        do {
+            let all: [ParentActivityRow] = try await supabase
+                .from("parent_activity")
+                .select()
+                .ilike("title",
+                       pattern: "%\(child.name)%")
+                .order("created_at", ascending: false)
+                .limit(20)
+                .execute()
+                .value
+
+            await MainActor.run {
+                activities = all
+                isLoading  = false
+            }
+        } catch {
+            print("❌ fetchActivity: \(error)")
+            await MainActor.run { isLoading = false }
+        }
+    }
+
+    func iconFor(_ title: String) -> String {
+        if title.contains("goal") { return "target" }
+        if title.contains("allowance") ||
+           title.contains("transferred") {
+            return "dollarsign.circle"
+        }
+        if title.contains("deleted") { return "trash" }
+        if title.contains("edited") { return "pencil" }
+        return "bell"
+    }
+
+    func timeAgo(_ date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        switch seconds {
+        case 0..<60:    return "Just now"
+        case 60..<3600:
+            let mins = seconds / 60
+            return "\(mins) min\(mins > 1 ? "s" : "") ago"
+        case 3600..<86400:
+            let hours = seconds / 3600
+            return "\(hours) hour\(hours > 1 ? "s" : "") ago"
+        case 86400..<604800:
+            let days = seconds / 86400
+            return "\(days) day\(days > 1 ? "s" : "") ago"
+        default:
+            let weeks = seconds / 604800
+            return "\(weeks) week\(weeks > 1 ? "s" : "") ago"
+        }
+    }
 }

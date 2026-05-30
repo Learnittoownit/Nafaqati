@@ -45,7 +45,6 @@ struct ChildProfile: Codable, Identifiable {
         case inviteCode       = "invite_code"
     }
 }
-
 // ─── JAR ──────────────────────────────────
 struct Jar: Codable, Identifiable {
     let id: UUID
@@ -98,6 +97,7 @@ struct Goal: Codable, Identifiable, Equatable {
     var target:     Double
     var saved:      Double = 0
     var days:       Int    = 30
+    var status:     String = "pending"
 
     var progress: Double {
         guard target > 0 else { return 0 }
@@ -118,9 +118,9 @@ struct Goal: Codable, Identifiable, Equatable {
         case createdAt  = "created_at"
         case icon
         case days
+        case status
     }
-}
-// ─── CHILD ACTIVITY ITEM ──────────────────
+}// ─── CHILD ACTIVITY ITEM ──────────────────
 struct ChildActivityItem: Identifiable, Equatable, Codable {
     var id:        UUID   = UUID()
     var name:      String

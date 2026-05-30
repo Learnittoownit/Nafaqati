@@ -15,6 +15,8 @@ struct PendingRequest: Identifiable {
     let description: String
     let isPositive: Bool
     var isApproved: Bool? = nil
+    var goalId: UUID? = nil
+
 }
 
 struct TransferRecord: Identifiable {
@@ -168,8 +170,10 @@ struct TransfersView: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        .task { await fetchChildren() }
-        .overlay {
+        .task {
+            await fetchChildren()
+            await fetchPendingGoals()
+        }        .overlay {
             if showSendMoney {
                 ZStack {
                     Color.black.opacity(0.4)
@@ -203,6 +207,54 @@ struct TransfersView: View {
             print("❌ fetchChildren error: \(error)")
         }
         isLoadingChildren = false
+    }
+    
+    private func fetchPendingGoals() async {
+        guard let parentId = authVM.currentUserId else {
+            return
+        }
+
+        do {
+            // Get all children for this parent
+            let children: [ChildProfile] = try await supabase
+                .from("child_profile")
+                .select()
+                .eq("parent_id", value: parentId.uuidString)
+                .execute()
+                .value
+
+            var requests: [PendingRequest] = []
+
+            for child in children {
+                let pendingGoals: [Goal] = try await supabase
+                    .from("goals")
+                    .select()
+                    .eq("child_id", value: child.id.uuidString)
+                    .eq("status", value: "pending")
+                    .execute()
+                    .value
+
+                for goal in pendingGoals {
+                    requests.append(PendingRequest(
+                        childName:    child.name,
+                        childInitial: String(
+                            child.name.prefix(1)),
+                        action:       "wants to set a goal",
+                        time:         "Just now",
+                        amount:       goal.target,
+                        description:  "Goal: \(goal.name) · Target: \(Int(goal.target)) SAR",
+                        isPositive:   true,
+                        goalId:       goal.id))
+                }
+            }
+
+            await MainActor.run {
+                pendingRequests = requests
+            }
+
+        } catch {
+            print("❌ fetchPendingGoals: \(error)")
+        }
     }
 }
 
@@ -1142,9 +1194,50 @@ struct PendingRequestCard: View {
             HStack(spacing: 10) {
                 Button {
                     withAnimation { request.isApproved = true }
+                    if let goalId = request.goalId {
+                        Task {
+                            // Update goal status
+                            try? await supabase
+                                .from("goals")
+                                .update(["status": "approved"])
+                                .eq("id", value: goalId.uuidString)
+                                .execute()
+
+                            // Get child_id from goal
+                            struct GoalRow: Codable {
+                                let child_id: String
+                                let title: String
+                            }
+                            if let goal = try? await supabase
+                                .from("goals")
+                                .select("child_id, title")
+                                .eq("id", value: goalId.uuidString)
+                                .single()
+                                .execute()
+                                .value as GoalRow {
+
+                                struct ChildActivityInsert: Encodable {
+                                    let child_id:  String
+                                    let title:     String
+                                    let meta:      String
+                                    let sf_symbol: String
+                                    let jar_color: String
+                                }
+
+                                try? await supabase
+                                    .from("child_activity")
+                                    .insert(ChildActivityInsert(
+                                        child_id:  goal.child_id,
+                                        title:     "🎉 Your goal '\(goal.title)' was approved!",
+                                        meta:      "Parent approved",
+                                        sf_symbol: "checkmark.circle.fill",
+                                        jar_color: "green"))
+                                    .execute()
+                            }
+                        }
+                    }
                 } label: {
-                    Text("Approve")
-                        .font(.system(
+                    Text("Approve")                        .font(.system(
                             size: 14, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -1155,9 +1248,48 @@ struct PendingRequestCard: View {
                 }
                 Button {
                     withAnimation { request.isApproved = false }
+                    if let goalId = request.goalId {
+                        Task {
+                            try? await supabase
+                                .from("goals")
+                                .update(["status": "rejected"])
+                                .eq("id", value: goalId.uuidString)
+                                .execute()
+
+                            struct GoalRow: Codable {
+                                let child_id: String
+                                let title: String
+                            }
+                            if let goal = try? await supabase
+                                .from("goals")
+                                .select("child_id, title")
+                                .eq("id", value: goalId.uuidString)
+                                .single()
+                                .execute()
+                                .value as GoalRow {
+
+                                struct ChildActivityInsert: Encodable {
+                                    let child_id:  String
+                                    let title:     String
+                                    let meta:      String
+                                    let sf_symbol: String
+                                    let jar_color: String
+                                }
+
+                                try? await supabase
+                                    .from("child_activity")
+                                    .insert(ChildActivityInsert(
+                                        child_id:  goal.child_id,
+                                        title:     "❌ Your goal '\(goal.title)' was rejected",
+                                        meta:      "Parent rejected",
+                                        sf_symbol: "xmark.circle.fill",
+                                        jar_color: "red"))
+                                    .execute()
+                            }
+                        }
+                    }
                 } label: {
-                    Text("Decline")
-                        .font(.system(
+                    Text("Decline")                        .font(.system(
                             size: 14, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)

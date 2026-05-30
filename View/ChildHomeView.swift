@@ -586,46 +586,51 @@ struct ChildHomeView: View {
               let childId = UUID(uuidString: childIdStr)
         else { return }
 
+        struct ChildActivityRow: Codable, Identifiable {
+            let id:        UUID
+            let title:     String
+            let sfSymbol:  String?
+            let jarColor:  String?
+            let createdAt: Date?
+
+            enum CodingKeys: String, CodingKey {
+                case id
+                case title
+                case sfSymbol  = "sf_symbol"
+                case jarColor  = "jar_color"
+                case createdAt = "created_at"
+            }
+        }
+
         do {
-            let transactions: [Transaction] = try await supabase
-                .from("transactions")
+            let rows: [ChildActivityRow] = try await supabase
+                .from("child_activity")
                 .select()
                 .eq("child_id", value: childId.uuidString)
                 .order("created_at", ascending: false)
-                .limit(10)
+                .limit(30)
                 .execute()
                 .value
 
-            let items = transactions.map { t in
+            let items = rows.map { row in
                 ChildActivityItem(
-                    name:      t.source == .allowance
-                               ? "Allowance received 💰"
-                               : t.source == .eidiya
-                               ? "Eidiya received 🌙"
-                               : "Money received 🎁",
-                    timestamp: t.createdAt ?? Date(),
-                    amount:    t.amount,
-                    jarColor:  t.source == .allowance
-                               ? "green"
-                               : "blue",
-                    sfSymbol:  "dollarsign.circle.fill")
+                    name:      row.title,
+                    timestamp: row.createdAt ?? Date(),
+                    amount:    0,
+                    jarColor:  row.jarColor  ?? "blue",
+                    sfSymbol:  row.sfSymbol  ?? "bell.fill")
             }
 
             await MainActor.run {
-                for item in items {
-                    if !activity.contains(where: {
-                        $0.name == item.name
-                        && $0.amount == item.amount
-                    }) {
-                        activity.insert(item, at: 0)
-                    }
-                }
+                // Replace local activity with
+                // Supabase data completely
+                activity = items
             }
+
         } catch {
             print("❌ fetchRecentActivity: \(error)")
         }
     }
-
     func jarImage(amount: Double,
                   color: String) -> String {
         if amount == 0       { return "Empty jar \(color)" }
