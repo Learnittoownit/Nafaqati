@@ -10,6 +10,7 @@ enum OnboardingStep: Hashable {
     case addChild(childIndex: Int, totalChildren: Int)
     case myChildren
     case childPIN
+    case parentSetPIN
     case allSet
     case login
     case forgotPassword(email: String)
@@ -53,8 +54,17 @@ struct OnboardingRouter: View {
                         MyChildrenView(path: $path)
 
                     case .childPIN:
-                        ChildPINView(path: $path)
+                        ChildPINView(
+                            path: $path,
+                            isLoginMode: true)
+                            .environmentObject(authVM)
 
+                    case .parentSetPIN:
+                        ChildPINView(
+                            path: $path,
+                            isLoginMode: false)
+                            .environmentObject(authVM)
+                        
                     case .allSet:
                         AllSetView(path: $path)
 

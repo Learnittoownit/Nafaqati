@@ -32,15 +32,17 @@ struct ChildProfile: Codable, Identifiable {
     var avatarUrl: String?
     var pin: String?
     var pinResetRequired: Bool
+    var inviteCode: String?
 
     enum CodingKeys: String, CodingKey {
         case id
-        case parentId           = "parent_id"
+        case parentId         = "parent_id"
         case name
         case age
-        case avatarUrl          = "avatar_url"
+        case avatarUrl        = "avatar_url"
         case pin
-        case pinResetRequired   = "pin_reset_required"
+        case pinResetRequired = "pin_reset_required"
+        case inviteCode       = "invite_code"
     }
 }
 

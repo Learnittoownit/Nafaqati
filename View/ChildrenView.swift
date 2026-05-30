@@ -148,7 +148,9 @@ struct ChildCard: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     let onRecentActivity: () -> Void
-
+    var childPIN:       String { child.pin        ?? "" }
+    var childInviteCode: String { child.inviteCode ?? "" }
+    
     var savingBalance:   Double { jars.first(where: { $0.type == .saving   })?.balance ?? 0 }
     var givingBalance:   Double { jars.first(where: { $0.type == .giving   })?.balance ?? 0 }
     var spendingBalance: Double { jars.first(where: { $0.type == .spending })?.balance ?? 0 }
@@ -217,6 +219,66 @@ struct ChildCard: View {
                         ChildJarPill(label: "Saving",   amount: savingBalance,   textColor: Color(hex: "8B5E00"), bgColor: Color(hex: "FEF0CC"))
                         ChildJarPill(label: "Giving",   amount: givingBalance,   textColor: Color(hex: "1E6B3C"), bgColor: Color(hex: "D6F0E2"))
                         ChildJarPill(label: "Spending", amount: spendingBalance, textColor: Color(hex: "9B2020"), bgColor: Color(hex: "FDDADA"))
+                    }// PIN display
+                    if !childInviteCode.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("CHILD LOGIN CODE")
+                                .font(.system(
+                                    size: 10,
+                                    weight: .bold,
+                                    design: .rounded))
+                                .foregroundColor(Color(hex: "2D6DAB"))
+                                .tracking(1)
+
+                            HStack(spacing: 8) {
+                                ForEach(
+                                    Array(childInviteCode.enumerated()),
+                                    id: \.offset) { _, digit in
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color(hex: "1B3A6B"))
+                                            .frame(width: 36, height: 44)
+                                        Text(String(digit))
+                                            .font(.system(
+                                                size: 20,
+                                                weight: .bold,
+                                                design: .rounded))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+
+                                Spacer()
+
+                                Button {
+                                    UIPasteboard.general.string =
+                                        childInviteCode
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.system(size: 13))
+                                        Text("Copy")
+                                            .font(.system(
+                                                size: 13,
+                                                weight: .semibold,
+                                                design: .rounded))
+                                    }
+                                    .foregroundColor(Color(hex: "2D6DAB"))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white)
+                                    .cornerRadius(10)
+                                }
+                            }
+
+                            Text("Share this code with \(child.name) so they can log in")
+                                .font(.system(
+                                    size: 11,
+                                    design: .rounded))
+                                .foregroundColor(Color(hex: "8A9BB0"))
+                        }
+                        .padding(14)
+                        .background(Color(hex: "EBF4FF"))
+                        .cornerRadius(12)
                     }
                     Button(action: onRecentActivity) {
                         Text("Recent Activity")

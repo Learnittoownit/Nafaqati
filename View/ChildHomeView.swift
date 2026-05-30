@@ -4,8 +4,10 @@ struct ChildHomeView: View {
 
     @Binding var goals:    [Goal]
     @Binding var activity: [ChildActivityItem]
-    let childName   = "User"
-    let avatar      = "🦁"
+    let childName = UserDefaults.standard.string(
+        forKey: "childName") ?? "User"
+    let avatar = UserDefaults.standard.string(
+        forKey: "childAvatar") ?? "🦁"
     let savingBal   = 0.0
     let givingBal   = 0.0
     let spendingBal = 0.0

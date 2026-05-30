@@ -4,13 +4,17 @@ import SwiftUI
 struct nafaqatiApp: App {
     @StateObject private var authVM   = AuthViewModel()
     @StateObject private var parentVM = ParentViewModel()
-    @State private var showSplash = true
-    @State private var path = NavigationPath()
+    @State private var showSplash     = true
+    @State private var path           = NavigationPath()
+    @AppStorage("isChildLoggedIn") var isChildLoggedIn = false
 
     var body: some Scene {
         WindowGroup {
             if showSplash {
                 SplashView(showSplash: $showSplash)
+
+            } else if isChildLoggedIn {
+                ChildTabView()
 
             } else if authVM.isLoggedIn {
                 ParentTabView()
@@ -20,7 +24,9 @@ struct nafaqatiApp: App {
             } else {
                 NavigationStack(path: $path) {
                     WelcomeView(path: $path)
-                        .navigationDestination(for: OnboardingStep.self) { step in
+                        .navigationDestination(
+                            for: OnboardingStep.self
+                        ) { step in
                             switch step {
 
                             case .roleSelection:
@@ -30,21 +36,25 @@ struct nafaqatiApp: App {
                                 ParentInfoView(path: $path)
                                     .environmentObject(authVM)
 
-                            case .createPassword(let name, let email, let numberOfChildren):
+                            case .createPassword(
+                                let name,
+                                let email,
+                                let numberOfChildren):
                                 CreatePasswordView(
                                     path: $path,
                                     name: name,
                                     email: email,
-                                    numberOfChildren: numberOfChildren
-                                )
+                                    numberOfChildren:
+                                        numberOfChildren)
                                 .environmentObject(authVM)
 
-                            case .addChild(let childIndex, let totalChildren):
+                            case .addChild(
+                                let childIndex,
+                                let totalChildren):
                                 AddChildView(
                                     path: $path,
                                     childIndex: childIndex,
-                                    totalChildren: totalChildren
-                                )
+                                    totalChildren: totalChildren)
                                 .environmentObject(authVM)
 
                             case .myChildren:
@@ -52,7 +62,16 @@ struct nafaqatiApp: App {
                                     .environmentObject(authVM)
 
                             case .childPIN:
-                                ChildPINView(path: $path)
+                                ChildPINView(
+                                    path: $path,
+                                    isLoginMode: true)
+                                    .environmentObject(authVM)
+
+                            case .parentSetPIN:
+                                ChildPINView(
+                                    path: $path,
+                                    isLoginMode: false)
+                                    .environmentObject(authVM)
 
                             case .allSet:
                                 AllSetView(path: $path)
@@ -70,12 +89,8 @@ struct nafaqatiApp: App {
                         }
                 }
                 .environmentObject(authVM)
-                .onAppear {
-                    path = NavigationPath()
-                }
-                .task {
-                    await authVM.checkSession()
-                }
+                .onAppear { path = NavigationPath() }
+                .task { await authVM.checkSession() }
             }
         }
     }

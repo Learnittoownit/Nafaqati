@@ -38,8 +38,7 @@ struct RoleSelectionView: View {
                     RoleCard(
                         icon: "person.fill",
                         title: "I'm a Kid",
-                        subtitle: "Log in with my PIN"
-                    ) {
+                        subtitle: "Log in with my 6-digit code"                    ) {
                         path.append(OnboardingStep.childPIN)
                     }
                 }
