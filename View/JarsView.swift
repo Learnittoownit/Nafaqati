@@ -11,7 +11,7 @@ struct JarsView: View {
     @State var savingBal:   Double = 0.0
     @State var givingBal:   Double = 0.0
     @State var spendingBal: Double = 0.0
-
+    @State private var showJarInfo = false
     @State private var savingHistory:   [HistoryItem] = []
     @State private var givingHistory:   [HistoryItem] = []
     @State private var spendingHistory: [HistoryItem] = []
@@ -123,11 +123,13 @@ struct JarsView: View {
                             .foregroundColor(
                                 Color(hex: "1B3A6B"))
                         Spacer()
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 18))
-                            .foregroundColor(
-                                Color(hex: "8A9BB0"))
-                    }
+                        Button {
+                            showJarInfo = true
+                        } label: {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(Color(hex: "185FA5"))
+                        }                    }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
 
@@ -307,6 +309,11 @@ struct JarsView: View {
                 })
             .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showJarInfo) {
+            JarInfoSheet()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 

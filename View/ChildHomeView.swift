@@ -548,6 +548,15 @@ struct ChildHomeView: View {
                 await fetchRecentActivity()
             }
         }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: UIApplication.willEnterForegroundNotification)
+        ) { _ in
+            Task {
+                await fetchJarBalances()
+                await fetchRecentActivity()
+            }
+        }
     }
 
     // ── Fetch jar balances from Supabase ──
@@ -622,8 +631,6 @@ struct ChildHomeView: View {
             }
 
             await MainActor.run {
-                // Replace local activity with
-                // Supabase data completely
                 activity = items
             }
 
