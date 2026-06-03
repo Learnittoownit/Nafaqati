@@ -458,6 +458,7 @@ struct ChildProfileEditSheet: View {
     @State private var showUnlinkConfirm = false
     @State private var showAvatarPicker  = false
     @State private var selectedAvatar    = ""
+    @State private var selectedImage:    UIImage? = nil
     @State private var savePercent       = 50
     @State private var spendPercent      = 30
     @State private var givePercent       = 20
@@ -590,7 +591,11 @@ struct ChildProfileEditSheet: View {
             givePercent    = child.jarGivePercent  ?? 20
         }
         .sheet(isPresented: $showAvatarPicker) {
-            AvatarPickerSheet(selectedAvatar: $selectedAvatar, showSheet: $showAvatarPicker)
+            AvatarPickerSheet(
+                selectedAvatar: $selectedAvatar,
+                selectedImage:  $selectedImage,
+                showSheet:      $showAvatarPicker
+            )
         }
         .confirmationDialog("Remove \(nameText)?", isPresented: $showRemoveConfirm, titleVisibility: .visible) {
             Button("Remove child", role: .destructive) { Task { await removeChild() } }
@@ -963,9 +968,9 @@ struct AddChildFromSettingsView: View {
 
     @State private var childName       = ""
     @State private var age             = ""
-    @State private var grade           = ""
     @State private var selectedGender  = ""
     @State private var selectedAvatar  = ""
+    @State private var selectedImage:  UIImage? = nil
     @State private var showAvatarSheet = false
     @State private var isSaving        = false
     @State private var saveError       = ""
@@ -986,15 +991,19 @@ struct AddChildFromSettingsView: View {
                                 ZStack {
                                     Circle().fill(Color.nafLightCard).frame(width: 72, height: 72)
                                         .overlay(Circle().stroke(Color.nafNavy.opacity(0.15), lineWidth: 2))
-                                    if selectedAvatar.isEmpty {
+                                    if let img = selectedImage {
+                                        Image(uiImage: img)
+                                            .resizable().scaledToFill()
+                                            .frame(width: 72, height: 72).clipShape(Circle())
+                                    } else if selectedAvatar.isEmpty {
                                         Image(systemName: "person.fill").font(.system(size: 28)).foregroundColor(Color.nafTextGray)
                                     } else {
                                         Text(selectedAvatar).font(.system(size: 36))
                                     }
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Child's character").font(.system(size: 15, weight: .semibold)).foregroundColor(Color.nafNavy)
-                                    Text("Tap to pick a character or photo").font(.system(size: 13)).foregroundColor(Color.nafTextGray)
+                                    Text("Child's photo").font(.system(size: 15, weight: .semibold)).foregroundColor(Color.nafNavy)
+                                    Text("Tap to take a photo or pick a character").font(.system(size: 13)).foregroundColor(Color.nafTextGray)
                                 }
                                 Spacer()
                             }
@@ -1014,10 +1023,8 @@ struct AddChildFromSettingsView: View {
                                     Spacer()
                                 }
                             }
-                            HStack(spacing: 12) {
-                                NafField(label: "Age", placeholder: "7 – 12", text: $age, keyboardType: .numberPad)
-                                NafField(label: "School Grade", placeholder: "Grade 3", text: $grade)
-                            }
+                            NafField(label: "Age", placeholder: "7 – 12", text: $age, keyboardType: .numberPad)
+
                             if !saveError.isEmpty {
                                 HStack(spacing: 6) {
                                     Image(systemName: "exclamationmark.circle.fill").font(.system(size: 13))
@@ -1049,7 +1056,11 @@ struct AddChildFromSettingsView: View {
                 }
             }
             .sheet(isPresented: $showAvatarSheet) {
-                AvatarPickerSheet(selectedAvatar: $selectedAvatar, showSheet: $showAvatarSheet)
+                AvatarPickerSheet(
+                    selectedAvatar: $selectedAvatar,
+                    selectedImage:  $selectedImage,
+                    showSheet:      $showAvatarSheet
+                )
             }
         }
     }
@@ -1058,8 +1069,12 @@ struct AddChildFromSettingsView: View {
         guard let parentId = authVM.currentUserId else { return }
         isSaving = true; saveError = ""
         let success = await childVM.createChildProfile(
-            parentId: parentId, name: childName.trimmingCharacters(in: .whitespaces),
-            age: Int(age) ?? 0, gender: selectedGender, grade: grade, avatarEmoji: selectedAvatar)
+            name:     childName.trimmingCharacters(in: .whitespaces),
+            age:      Int(age) ?? 0,
+            avatar:   selectedAvatar,
+            pin:      "",
+            parentId: parentId
+        )
         if success { await onDone(); await MainActor.run { dismiss() } }
         else { saveError = childVM.errorMessage ?? "Failed to add child. Please try again." }
         isSaving = false
@@ -1096,3 +1111,4 @@ struct SettingsRow: View {
         }
     }
 }
+

@@ -1,3 +1,6 @@
+// ChildViewModel.swift
+// Nafaqati
+
 import Foundation
 import Combine
 import Supabase
@@ -5,21 +8,19 @@ import Supabase
 @MainActor
 final class ChildViewModel: ObservableObject {
 
-    var isLoading: Bool      = false
-    var errorMessage: String?
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String?
 
     func createChildProfile(
-        parentId: UUID,
         name: String,
         age: Int,
-        gender: String,
-        grade: String,
-        avatarEmoji: String
+        avatar: String,
+        pin: String,
+        parentId: UUID
     ) async -> Bool {
 
         isLoading    = true
         errorMessage = nil
-        objectWillChange.send()
 
         struct ChildRow: Encodable {
             let parent_id:          String
@@ -36,19 +37,17 @@ final class ChildViewModel: ObservableObject {
                     parent_id:          parentId.uuidString,
                     name:               name,
                     age:                age,
-                    avatar_url:         avatarEmoji,
+                    avatar_url:         avatar,
                     pin_reset_required: true
                 ))
                 .execute()
 
             isLoading = false
-            objectWillChange.send()
             return true
 
         } catch {
             errorMessage = error.localizedDescription
             isLoading    = false
-            objectWillChange.send()
             return false
         }
     }
