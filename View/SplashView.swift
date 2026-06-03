@@ -1,49 +1,108 @@
+// SplashView.swift
+// Nafaqati
+//
+// Animated splash screen:
+//   1. Money roll drops in smoothly from top (no bounce)
+//   2. App name fades in below
+//   3. Tagline fades in
+//   4. Auto-advances after 5 seconds
+
 import SwiftUI
 
 struct SplashView: View {
     @Binding var showSplash: Bool
 
+    // ── Animation states ──────────────────────────────────────
+    @State private var moneyOffsetY: CGFloat = -400   // starts above screen
+    @State private var moneyScale:   CGFloat = 0.6
+    @State private var textOpacity:  Double  = 0.0
+    @State private var taglineOpacity: Double = 0.0
+
     var body: some View {
         ZStack {
-            Color.nafBackground.ignoresSafeArea()
+            // ── Background ────────────────────────────────────
+            Color(hex: "2D6DAB").ignoresSafeArea()
 
-            VStack(spacing: 20) {
+            VStack(spacing: 0) {
                 Spacer()
 
-                // App icon circle
-                ZStack {
-                    Circle()
-                        .fill(Color.nafNavy)
-                        .frame(width: 100, height: 100)
-                    Text("🪙")
-                        .font(.system(size: 48))
-                }
+                // ── Logo ──────────────────────────────────────
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 400, height: 400)
+                    .scaleEffect(moneyScale)
+                    .offset(y: moneyOffsetY)
 
-                // App name
-                VStack(spacing: 4) {
+                Spacer().frame(height: 32)
+
+                // ── App name ──────────────────────────────────
+                VStack(spacing: 8) {
                     Text("Nafaqati")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(Color.nafNavy)
-                    Text("نفقاتي")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(Color.nafNavy)
+                        .font(.system(size: 45, weight: .bold))
+                        .foregroundColor(.white)
+
+                    Text("نفقتي")
+                        .font(.system(size: 35, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
                 }
+                .opacity(textOpacity)
 
                 Spacer()
 
+                // ── Tagline ───────────────────────────────────
                 Text("Trusted by Saudi families")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color.nafTextGray)
-                    .padding(.bottom, 40)
+                    .font(.system(size: 20))
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.bottom, 50)
+                    .opacity(taglineOpacity)
             }
         }
         .onAppear {
-            // Auto-advance after 2 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                withAnimation {
-                    showSplash = false
-                }
+            runAnimationSequence()
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // MARK: - Animation Sequence
+    // ─────────────────────────────────────────────────────────
+
+    private func runAnimationSequence() {
+
+        // Step 1: Money drops in smoothly (no bounce)
+        withAnimation(.easeOut(duration: 1.5)) {
+            moneyOffsetY = 0
+            moneyScale   = 1.0
+        }
+
+        // Step 2: App name fades in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeOut(duration: 0.5)) {
+                textOpacity = 1.0
+            }
+        }
+
+        // Step 3: Tagline fades in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
+            withAnimation(.easeOut(duration: 0.4)) {
+                taglineOpacity = 1.0
+            }
+        }
+
+        // Step 4: Auto-advance to next screen
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.7) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                showSplash = false
             }
         }
     }
 }
+
+// ─────────────────────────────────────────────
+// MARK: - Preview
+// ─────────────────────────────────────────────
+
+#Preview {
+    SplashView(showSplash: .constant(true))
+}
+
