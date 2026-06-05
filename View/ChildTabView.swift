@@ -84,8 +84,14 @@ struct ChildTabView: View {
             let fetchedGoals: [Goal] = try await supabase
                 .from("goals").select()
                 .eq("child_id", value: childId.uuidString)
+                .neq("status", value: "deleted")
                 .execute().value
-            await MainActor.run { goals = fetchedGoals }
+
+            // Merge: keep locally deleted goals, add fresh ones from server
+            await MainActor.run {
+                let deletedGoals = goals.filter { $0.status == "deleted" }
+                goals = fetchedGoals + deletedGoals
+            }
         } catch {
             if let data    = UserDefaults.standard.data(forKey: "savedGoals"),
                let decoded = try? JSONDecoder().decode([Goal].self, from: data) {
@@ -99,3 +105,4 @@ struct ChildTabView: View {
         }
     }
 }
+
