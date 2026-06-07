@@ -517,6 +517,14 @@ struct ChildHomeView: View {
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 14)
 
+                                        // Voice note player
+                                        if let vUrl = item.voiceNoteUrl,
+                                           !vUrl.isEmpty {
+                                            VoiceNotePlayerButton(url: vUrl)
+                                                .padding(.horizontal, 16)
+                                                .padding(.bottom, 12)
+                                        }
+
                                         if item.id !=
                                             activity.last?.id {
                                             Divider()
@@ -599,45 +607,53 @@ struct ChildHomeView: View {
         else { return }
 
         struct ChildActivityRow: Codable, Identifiable {
-            let id:        UUID
-            let title:     String
-            let sfSymbol:  String?
-            let jarColor:  String?
-            let amount:    Double?
-            let createdAt: Date?
+            let id:           UUID
+            let title:        String
+            let sfSymbol:     String?
+            let jarColor:     String?
+            let amount:       Double?
+            let createdAt:    Date?
+            let voiceNoteUrl: String?
 
             enum CodingKeys: String, CodingKey {
                 case id
                 case title
-                case sfSymbol  = "sf_symbol"
-                case jarColor  = "jar_color"
+                case sfSymbol     = "sf_symbol"
+                case jarColor     = "jar_color"
                 case amount
-                case createdAt = "created_at"
+                case createdAt    = "created_at"
+                case voiceNoteUrl = "voice_note_url"
             }
         }
+
+        // Only show last 7 days
+        let sevenDaysAgo = Calendar.current.date(
+            byAdding: .day, value: -7, to: Date()) ?? Date()
+        let formatter = ISO8601DateFormatter()
+        let cutoff = formatter.string(from: sevenDaysAgo)
 
         do {
             let rows: [ChildActivityRow] = try await supabase
                 .from("child_activity")
                 .select()
                 .eq("child_id", value: childId.uuidString)
+                .gte("created_at", value: cutoff)
                 .order("created_at", ascending: false)
-                .limit(30)
+                .limit(50)
                 .execute()
                 .value
 
             let items = rows.map { row in
                 ChildActivityItem(
-                    name:      row.title,
-                    timestamp: row.createdAt ?? Date(),
-                    amount:    row.amount    ?? 0,
-                    jarColor:  row.jarColor  ?? "blue",
-                    sfSymbol:  row.sfSymbol  ?? "bell.fill")
+                    name:         row.title,
+                    timestamp:    row.createdAt    ?? Date(),
+                    amount:       row.amount       ?? 0,
+                    jarColor:     row.jarColor     ?? "blue",
+                    sfSymbol:     row.sfSymbol     ?? "bell.fill",
+                    voiceNoteUrl: row.voiceNoteUrl)
             }
 
-            await MainActor.run {
-                activity = items
-            }
+            await MainActor.run { activity = items }
 
         } catch {
             print("❌ fetchRecentActivity: \(error)")
