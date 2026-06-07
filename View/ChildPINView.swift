@@ -27,15 +27,11 @@ struct ChildPINView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                ZStack {
-                    Circle()
-                        .fill(Color.nafLightCard)
-                        .frame(width: 100, height: 100)
-                    Image("nafaqati_logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 60, height: 60)
-                }
+                Image("AppLogoFull")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 150, height: 150)
+                    .cornerRadius(22)
 
                 Spacer().frame(height: 32)
 
@@ -167,6 +163,7 @@ struct ChildPINView: View {
         SecureField("", text: text)
             .keyboardType(.numberPad)
             .multilineTextAlignment(.center)
+            .foregroundColor(Color.nafNavy)
             .font(.system(size: 22, weight: .bold))
             .frame(width: total == 6 ? 48 : 64,
                    height: 56)
@@ -203,7 +200,7 @@ struct ChildPINView: View {
                 .eq("invite_code", value: codeString)
                 .execute()
                 .value
-//825451
+
             if let child = children.first {
                 UserDefaults.standard.set(
                     child.id.uuidString,
@@ -283,3 +280,14 @@ struct ChildPINView: View {
         }
     }
 }
+
+#Preview {
+    NavigationStack {
+        ChildPINView(
+            path: .constant(NavigationPath()),
+            isLoginMode: true
+        )
+        .environmentObject(AuthViewModel())
+    }
+}
+

@@ -13,11 +13,23 @@ struct ActivityItem: Identifiable {
 }
 
 // ─────────────────────────────────────────────
-// MARK: - Allowance Schedule
+// MARK: - Allowance Schedule (supports multiple)
 // ─────────────────────────────────────────────
-struct AllowanceSchedule {
-    let childName: String
-    let nextDueDate: Date
+struct AllowanceSchedule: Codable, Identifiable {
+    let id:          UUID
+    let childName:   String
+    var nextDueDate: Date
+    let isWeekly:    Bool
+    let weekDay:     String? // "Sun","Mon","Tue","Wed","Thu","Fri","Sat"
+
+    init(id: UUID = UUID(), childName: String, nextDueDate: Date,
+         isWeekly: Bool = false, weekDay: String? = nil) {
+        self.id          = id
+        self.childName   = childName
+        self.nextDueDate = nextDueDate
+        self.isWeekly    = isWeekly
+        self.weekDay     = weekDay
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -26,31 +38,103 @@ struct AllowanceSchedule {
 @MainActor
 final class ParentViewModel: ObservableObject {
 
-    @Published var parentName: String            = ""
-    @Published var parentAvatar: String          = "🧑🏽"
-    @Published var balance: Double               = 0
-    @Published var activeChildren: Int           = 0
-    @Published var moneySent: Double             = 0
-    @Published var activeGoals: Int              = 0
-    @Published var activity: [ActivityItem]      = []
-    @Published var allowanceSchedule: AllowanceSchedule? = nil
-    @Published var isLoading: Bool               = false
+    @Published var parentName: String        = ""
+    @Published var parentAvatar: String      = "🧑🏽"
+    @Published var balance: Double           = 0
+    @Published var activeChildren: Int       = 0
+    @Published var moneySent: Double         = 0
+    @Published var activeGoals: Int          = 0
+    @Published var activity: [ActivityItem]  = []
+    @Published var isLoading: Bool           = false
+
+    // ── Multiple reminders stored in UserDefaults ──
+    @Published var allowanceSchedules: [AllowanceSchedule] = [] {
+        didSet { saveReminders() }
+    }
 
     var parentId: UUID? = nil
 
-    var reminderText: String? {
-        guard let schedule = allowanceSchedule else { return nil }
+    // ── Active reminders (expired custom dates removed, weekly auto-advanced) ──
+    var activeSchedules: [AllowanceSchedule] {
+        let today = Calendar.current.startOfDay(for: Date())
+        return allowanceSchedules.compactMap { schedule in
+            var s = schedule
+            if s.isWeekly {
+                // If due date has passed, advance to next occurrence of the same weekday
+                while Calendar.current.startOfDay(for: s.nextDueDate) < today {
+                    s.nextDueDate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: s.nextDueDate) ?? s.nextDueDate
+                }
+                return s
+            } else {
+                // Custom date: show until date passes
+                return Calendar.current.startOfDay(for: s.nextDueDate) >= today ? s : nil
+            }
+        }
+    }
+
+    // ── Keep old property for backward compatibility ──
+    var allowanceSchedule: AllowanceSchedule? { activeSchedules.first }
+
+    // ── Reminder text for a single schedule ──
+    func reminderText(for schedule: AllowanceSchedule) -> String {
         let days = Calendar.current.dateComponents(
             [.day],
             from: Calendar.current.startOfDay(for: Date()),
             to:   Calendar.current.startOfDay(for: schedule.nextDueDate)
-        ).day ?? 999
+        ).day ?? 0
         switch days {
-        case 0:  return "\(schedule.childName)'s allowance is due today!"
-        case 1:  return "\(schedule.childName)'s allowance is due tomorrow"
-        case 2:  return "\(schedule.childName)'s allowance is due in 2 days"
-        default: return nil
+        case 0:  return "⏰ \(schedule.childName)'s allowance is due today!"
+        case 1:  return "⏰ \(schedule.childName)'s allowance is due tomorrow"
+        default: return "⏰ \(schedule.childName)'s allowance is due in \(days) days"
         }
+    }
+
+    // ── Legacy single reminderText ──
+    var reminderText: String? {
+        guard let s = activeSchedules.first else { return nil }
+        return reminderText(for: s)
+    }
+
+    // ─────────────────────────────────────────
+    // MARK: - Reminders persistence
+    // ─────────────────────────────────────────
+    private let remindersKey = "nafaqati_reminders"
+
+    func loadReminders() {
+        guard let data = UserDefaults.standard.data(forKey: remindersKey),
+              let decoded = try? JSONDecoder().decode([AllowanceSchedule].self, from: data)
+        else { return }
+        allowanceSchedules = decoded
+    }
+
+    private func saveReminders() {
+        if let encoded = try? JSONEncoder().encode(allowanceSchedules) {
+            UserDefaults.standard.set(encoded, forKey: remindersKey)
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // MARK: - Set / Remove reminder
+    // ─────────────────────────────────────────
+    func setReminder(childName: String, nextDueDate: Date,
+                     isWeekly: Bool = true, weekDay: String? = nil) {
+        // Remove existing reminder for same child then add new one
+        allowanceSchedules.removeAll { $0.childName == childName }
+        let schedule = AllowanceSchedule(
+            childName:   childName,
+            nextDueDate: nextDueDate,
+            isWeekly:    isWeekly,
+            weekDay:     weekDay)
+        allowanceSchedules.append(schedule)
+        Task {
+            await logActivity(
+                title: "You set up a reminder for \(childName)",
+                meta:  "Today · \(childName)")
+        }
+    }
+
+    func removeReminder(for childName: String) {
+        allowanceSchedules.removeAll { $0.childName == childName }
     }
 
     // ─────────────────────────────────────────
@@ -59,9 +143,9 @@ final class ParentViewModel: ObservableObject {
     func loadFromSupabase(parentId: UUID) async {
         self.parentId = parentId
         isLoading     = true
+        loadReminders() // Load saved reminders on start
 
         do {
-            // 1. Fetch parent name, avatar, balance
             struct ParentRow: Decodable {
                 let name:      String
                 let avatarUrl: String?
@@ -80,7 +164,6 @@ final class ParentViewModel: ObservableObject {
                 .execute()
                 .value
 
-            // 2. Fetch children
             let children: [ChildProfile] = try await supabase
                 .from("child_profile")
                 .select()
@@ -88,7 +171,6 @@ final class ParentViewModel: ObservableObject {
                 .execute()
                 .value
 
-            // 3. Fetch active goals count
             var goalsCount = 0
             if !children.isEmpty {
                 let allGoals: [Goal] = try await supabase
@@ -101,7 +183,6 @@ final class ParentViewModel: ObservableObject {
                 goalsCount = allGoals.count
             }
 
-            // 4. Fetch recent activity
             let acts: [ParentActivityRow] = try await supabase
                 .from("parent_activity")
                 .select()
@@ -118,7 +199,6 @@ final class ParentViewModel: ObservableObject {
                     isToday: Calendar.current.isDateInToday(row.createdAt ?? Date()))
             }
 
-            // 5. Money sent = sum of all children's jar balances
             var totalSent: Double = 0
             if !children.isEmpty {
                 let allJars: [Jar] = try await supabase
@@ -146,7 +226,7 @@ final class ParentViewModel: ObservableObject {
     }
 
     // ─────────────────────────────────────────
-    // MARK: - Add to balance (persisted)
+    // MARK: - Add to balance
     // ─────────────────────────────────────────
     func addToBalance(_ amount: Double) async {
         guard let parentId = parentId else { return }
@@ -167,11 +247,10 @@ final class ParentViewModel: ObservableObject {
     }
 
     // ─────────────────────────────────────────
-    // MARK: - Send money (persisted, no negatives)
+    // MARK: - Send money
     // ─────────────────────────────────────────
     func sendMoney(to childName: String, amount: Double, type: String) async {
         guard let parentId = parentId else { return }
-        // Safety: never go below 0
         let deduct     = min(amount, balance)
         let newBalance = max(0, balance - deduct)
         do {
@@ -191,7 +270,7 @@ final class ParentViewModel: ObservableObject {
     }
 
     // ─────────────────────────────────────────
-    // MARK: - Log activity to Supabase
+    // MARK: - Log activity
     // ─────────────────────────────────────────
     func logActivity(title: String, meta: String) async {
         guard let parentId = parentId else { return }
@@ -213,15 +292,6 @@ final class ParentViewModel: ObservableObject {
                 at: 0)
         } catch {
             print("❌ logActivity: \(error)")
-        }
-    }
-
-    func setReminder(childName: String, nextDueDate: Date) {
-        allowanceSchedule = AllowanceSchedule(childName: childName, nextDueDate: nextDueDate)
-        Task {
-            await logActivity(
-                title: "You set up a reminder",
-                meta:  "Today · \(childName)")
         }
     }
 }

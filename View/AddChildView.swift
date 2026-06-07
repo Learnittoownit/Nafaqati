@@ -1,8 +1,6 @@
-// AddChildView.swift
-// Nafaqati
-
 import SwiftUI
 import PhotosUI
+import Supabase
 
 struct AddChildView: View {
     @Binding var path: NavigationPath
@@ -15,6 +13,7 @@ struct AddChildView: View {
     @State private var childName:       String    = ""
     @State private var age:             String    = ""
 
+    @State private var createdChildId:   UUID?     = nil   // tracks if child was already saved
     @State private var selectedGender:  String    = ""
     @State private var selectedAvatar:  String    = ""
     @State private var selectedImage:   UIImage?  = nil   // real photo if taken
@@ -187,6 +186,9 @@ struct AddChildView: View {
                 }
             }
         }
+        .onAppear {
+            Task { await loadExistingChildIfNeeded() }
+        }
         .sheet(isPresented: $showAvatarSheet) {
             AvatarPickerSheet(
                 selectedAvatar: $selectedAvatar,
@@ -208,8 +210,57 @@ struct AddChildView: View {
         }
     }
 
+    // ── Load existing child if already created for this slot ──
+    private func loadExistingChildIfNeeded() async {
+        guard createdChildId == nil,
+              let parentId = authVM.currentUserId else { return }
+
+        let children: [ChildProfile] = (try? await supabase
+            .from("child_profile")
+            .select()
+            .eq("parent_id", value: parentId.uuidString)
+            .order("created_at", ascending: true)
+            .execute()
+            .value) ?? []
+
+        // childIndex is 1-based, so slot index is childIndex - 1
+        let slotIndex = childIndex - 1
+        if slotIndex < children.count {
+            let child = children[slotIndex]
+            await MainActor.run {
+                createdChildId = child.id
+                childName      = child.name
+                age            = "\(child.age)"
+                selectedAvatar = child.avatarUrl ?? ""
+            }
+        }
+    }
+
     private func saveAndContinue() async {
         guard let parentId = authVM.currentUserId else { return }
+
+        // If child was already created, update instead of insert
+        if let existingId = createdChildId {
+            struct ChildUpdate: Encodable {
+                let name: String; let age: Int; let avatar_url: String
+            }
+            do {
+                try await supabase
+                    .from("child_profile")
+                    .update(ChildUpdate(
+                        name:       childName.trimmingCharacters(in: .whitespaces),
+                        age:        Int(age) ?? 0,
+                        avatar_url: selectedAvatar))
+                    .eq("id", value: existingId.uuidString)
+                    .execute()
+                navigateNext()
+            } catch {
+                print("❌ updateChild error: \(error)")
+            }
+            return
+        }
+
+        // First time — create new child
         let success = await childVM.createChildProfile(
             name:     childName.trimmingCharacters(in: .whitespaces),
             age:      Int(age) ?? 0,
@@ -218,7 +269,21 @@ struct AddChildView: View {
             pin:      "",
             parentId: parentId
         )
-        if success { navigateNext() }
+        if success {
+            // Fetch the created child's ID to track it
+            if let children = try? await supabase
+                .from("child_profile")
+                .select()
+                .eq("parent_id", value: parentId.uuidString)
+                .order("created_at", ascending: false)
+                .limit(1)
+                .execute()
+                .value as [ChildProfile],
+               let child = children.first {
+                await MainActor.run { createdChildId = child.id }
+            }
+            navigateNext()
+        }
     }
 
     private func navigateNext() {
@@ -479,3 +544,4 @@ struct AvatarPickerSheet: View {
         .environmentObject(AuthViewModel())
     }
 }
+

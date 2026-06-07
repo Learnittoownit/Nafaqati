@@ -26,7 +26,6 @@ struct ParentHomeView: View {
     var body: some View {
         ZStack(alignment: .top) {
 
-            // ── BLUE HEADER BACKGROUND ────────────
             Color(hex: "2D6DAB")
                 .ignoresSafeArea(edges: .top)
                 .frame(height: 360)
@@ -92,34 +91,22 @@ struct ParentHomeView: View {
                     // ── WHITE ROUNDED CARD BODY ───────
                     VStack(spacing: 14) {
 
-                        // STATS CONTAINER — 2D6DAB card with 3 inner tiles
+                        // STATS
                         HStack(spacing: 10) {
-                            StatTile(
-                                icon: "person.2.fill",
-                                label: "Active Children",
-                                value: "\(parentVM.activeChildren)",
-                                sub: "children"
-                            )
-                            StatTile(
-                                icon: "chart.line.uptrend.xyaxis",
-                                label: "Money Sent",
-                                value: "\(Int(parentVM.moneySent))",
-                                sub: "SAR"
-                            )
-                            StatTile(
-                                icon: "scope",
-                                label: "Active Goals",
-                                value: "\(parentVM.activeGoals)",
-                                sub: "Goals"
-                            )
+                            StatTile(icon: "person.2.fill", label: "Active Children",
+                                     value: "\(parentVM.activeChildren)", sub: "children")
+                            StatTile(icon: "chart.line.uptrend.xyaxis", label: "Money Sent",
+                                     value: "\(Int(parentVM.moneySent))", sub: "SAR")
+                            StatTile(icon: "scope", label: "Active Goals",
+                                     value: "\(parentVM.activeGoals)", sub: "Goals")
                         }
                         .frame(maxWidth: .infinity)
                         .padding(10)
                         .background(Color(hex: "2D6DAB"))
                         .cornerRadius(18)
 
-                        // REMINDER
-                        if let reminderText = parentVM.reminderText {
+                        // ── REMINDERS (one banner per child) ──
+                        ForEach(parentVM.activeSchedules) { schedule in
                             HStack(spacing: 12) {
                                 RoundedRectangle(cornerRadius: 10)
                                     .fill(Color(hex: "C0392B"))
@@ -133,11 +120,21 @@ struct ParentHomeView: View {
                                     Text("Allowance Reminder")
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundColor(Color(hex: "C0392B"))
-                                    Text(reminderText)
+                                    Text(parentVM.reminderText(for: schedule))
                                         .font(.system(size: 12))
                                         .foregroundColor(Color(hex: "E05555"))
                                 }
                                 Spacer()
+                                // ── Remove button ──
+                                Button {
+                                    withAnimation {
+                                        parentVM.removeReminder(for: schedule.childName)
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(Color(hex: "C0392B").opacity(0.5))
+                                }
                             }
                             .padding(14)
                             .background(Color(hex: "FFF0EE"))
@@ -222,7 +219,6 @@ struct ParentHomeView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 20)
                     .padding(.bottom, 110)
-                    // ── THIS IS THE ROUNDED WHITE CARD ──
                     .background(
                         Color(hex: "E8EDF2")
                             .cornerRadius(50, corners: [.topLeft, .topRight])
@@ -271,7 +267,7 @@ struct RoundedCorner: Shape {
 }
 
 // ─────────────────────────────────────────────
-// MARK: - Stat Tile (inside the blue container)
+// MARK: - Stat Tile
 // ─────────────────────────────────────────────
 struct StatTile: View {
     let icon:  String
