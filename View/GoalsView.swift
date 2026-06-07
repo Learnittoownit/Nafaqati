@@ -18,8 +18,10 @@ struct GoalsView: View {
     @Binding var goals:    [Goal]
     @Binding var activity: [ChildActivityItem]
     var onGoalAdded:       () -> Void
-    @State private var activeSheet:  GoalSheet?
-    @State private var showHistory = false
+    @State private var activeSheet:      GoalSheet?
+    @State private var showHistory     = false
+    @State private var goalToDelete:   Goal? = nil
+    @State private var showDeleteAlert = false
     let maxGoals = 5
 
     let goalIdeas: [(String, String)] = [
@@ -92,6 +94,95 @@ struct GoalsView: View {
                     } else {
                         activeSection
                     }
+                }
+            }
+        }
+        .overlay {
+            if showDeleteAlert, let goal = goalToDelete {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showDeleteAlert = false
+                            goalToDelete    = nil
+                        }
+
+                    VStack(spacing: 0) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(hex: "FFEBEE"))
+                                .frame(width: 56, height: 56)
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(Color(hex: "E05555"))
+                        }
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
+
+                        Text("Delete \"\(goal.name)\"?")
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundColor(Color(hex: "1B3A6B"))
+                            .padding(.horizontal, 20)
+
+                        Text("This goal will move to your History.")
+                            .font(.system(size: 13, design: .rounded))
+                            .foregroundColor(Color(hex: "8A9BB0"))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 6)
+                            .padding(.bottom, 20)
+
+                        Divider()
+
+                        Button {
+                            withAnimation {
+                                activity.insert(ChildActivityItem(
+                                    name: "Deleted goal: \(goal.name)",
+                                    amount: 0, jarColor: "red", sfSymbol: "trash"), at: 0)
+                                if let i = goals.firstIndex(where: { $0.id == goal.id }) {
+                                    goals[i].status = "deleted"
+                                }
+                                Task {
+                                    do {
+                                        try await supabase.from("goals")
+                                            .update(["status": "deleted"])
+                                            .eq("id", value: goal.id.uuidString).execute()
+                                        print("✅ Goal deleted in Supabase")
+                                    } catch {
+                                        print("❌ Failed to delete goal in Supabase: \(error)")
+                                    }
+                                    await logChildActivity(title: "Deleted goal: \(goal.name)", sfSymbol: "trash", jarColor: "red")
+                                    let cn = UserDefaults.standard.string(forKey: "childName") ?? "Your child"
+                                    await notifyParent(title: "🗑️ \(cn) deleted goal: \(goal.name)", meta: "Goal deleted · Target was \(Int(goal.target)) SAR")
+                                }
+                            }
+                            showDeleteAlert = false
+                            goalToDelete    = nil
+                        } label: {
+                            Text("Yes, delete it")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(Color(hex: "E05555"))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                        }
+
+                        Divider()
+
+                        Button {
+                            showDeleteAlert = false
+                            goalToDelete    = nil
+                        } label: {
+                            Text("No, keep it")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(Color(hex: "1B3A6B"))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                        }
+                        .padding(.bottom, 8)
+                    }
+                    .background(Color.white)
+                    .cornerRadius(20)
+                    .padding(.horizontal, 40)
                 }
             }
         }
@@ -228,7 +319,7 @@ struct GoalsView: View {
     var activeSection: some View {
         VStack(spacing: 20) {
             let activeGoals = goals.filter {
-                $0.status != "rejected"
+                $0.status != "rejected" && $0.status != "deleted"
             }
 
             if activeGoals.isEmpty {
@@ -381,7 +472,7 @@ struct GoalsView: View {
     // ── History section ───────────────────
     var historySection: some View {
         let historyGoals = goals.filter {
-            $0.status == "rejected"
+            $0.status == "rejected" || $0.status == "deleted"
         }
 
         return VStack(spacing: 12) {
@@ -447,15 +538,12 @@ struct GoalsView: View {
                     .foregroundColor(Color(hex: "8A9BB0"))
             }
             Spacer()
-            Text("Rejected")
-                .font(.system(
-                    size: 11,
-                    weight: .semibold,
-                    design: .rounded))
-                .foregroundColor(Color(hex: "C62828"))
+            Text(goal.status == "deleted" ? "Deleted" : "Rejected")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundColor(goal.status == "deleted" ? Color(hex: "555555") : Color(hex: "C62828"))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color(hex: "FFEBEE"))
+                .background(goal.status == "deleted" ? Color(hex: "EEEEEE") : Color(hex: "FFEBEE"))
                 .cornerRadius(10)
         }
         .padding(16)
@@ -507,17 +595,18 @@ struct GoalsView: View {
                 }
 
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(Int(goal.saved)) SAR")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("from saving jar")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
+                    Text("\(Int(goal.saved)) SAR")
+                        .font(.system(
+                            size: 22,
+                            weight: .bold,
+                            design: .rounded))
+                        .foregroundColor(.white)
                     Spacer()
                     Text("\(goal.percent)%")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(
+                            size: 22,
+                            weight: .bold,
+                            design: .rounded))
                         .foregroundColor(.white)
                 }
 
@@ -537,51 +626,24 @@ struct GoalsView: View {
                 .frame(height: 10)
 
                 HStack {
-                    Text("💰 \(Int(goal.saved)) SAR saved")
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundColor(.white.opacity(0.75))
+                    Text("saved: \(Int(goal.saved))")
+                        .font(.system(
+                            size: 12,
+                            design: .rounded))
+                        .foregroundColor(.white.opacity(0.65))
                     Spacer()
                     Text("\(Int(goal.target - goal.saved)) SAR to go!")
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundColor(.white.opacity(0.75))
+                        .font(.system(
+                            size: 12,
+                            design: .rounded))
+                        .foregroundColor(.white.opacity(0.65))
                 }
 
                 MilestoneDots(progress: goal.progress)
 
                 Button {
-                    withAnimation {
-                        let item = ChildActivityItem(
-                            name:     "Deleted goal: \(goal.name)",
-                            amount:   0,
-                            jarColor: "red",
-                            sfSymbol: "trash")
-                        activity.insert(item, at: 0)
-
-                        Task {
-                            try? await supabase
-                                .from("goals")
-                                .delete()
-                                .eq("id",
-                                    value: goal.id
-                                        .uuidString)
-                                .execute()
-
-                            await logChildActivity(
-                                title:    "Deleted goal: \(goal.name)",
-                                sfSymbol: "trash",
-                                jarColor: "red")
-
-                            let cn3 = UserDefaults.standard.string(forKey: "childName") ?? "Your child"
-                            await notifyParent(
-                                title: "🗑️ \(cn3) deleted goal: \(goal.name)",
-                                meta:  "Goal deleted · Target was \(Int(goal.target)) SAR")
-                        }
-
-                        if let i = goals.firstIndex(
-                            where: { $0.id == goal.id }) {
-                            goals.remove(at: i)
-                        }
-                    }
+                    goalToDelete   = goal
+                    showDeleteAlert = true
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "trash")
@@ -859,3 +921,20 @@ struct MilestoneDots: View {
             : Color.white.opacity(0.2)
     }
 }
+
+// ─────────────────────────────────────────────
+// MARK: - Preview
+// ─────────────────────────────────────────────
+
+#Preview {
+    GoalsView(
+        goals: .constant([
+            Goal(name: "Bike", icon: "🚲", target: 200, saved: 50, days: 30),
+            Goal(name: "PlayStation", icon: "🎮", target: 500, saved: 0, days: 60, status: "rejected"),
+            Goal(name: "AirPods", icon: "🎧", target: 300, saved: 0, days: 30, status: "deleted")
+        ]),
+        activity: .constant([]),
+        onGoalAdded: {}
+    )
+}
+
