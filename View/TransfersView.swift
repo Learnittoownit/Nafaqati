@@ -606,20 +606,10 @@ struct SendMoneyPopup: View {
             }
 
             if showVoice {
-                VStack(spacing: 8) {
-                    Text("Tap to record a voice note").font(.system(size: 13)).foregroundColor(.white.opacity(0.8))
-                    Button { } label: {
-                        ZStack {
-                            Circle().fill(Color(hex: "2D6DAB")).frame(width: 50, height: 50)
-                            Image(systemName: "mic.fill").font(.system(size: 20)).foregroundColor(.white)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 16)
-                .background(Color(hex: "1B3A6B"))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .padding(.horizontal, 20).padding(.top, 10)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                VoiceNoteRecorder(voiceNoteUrl: $voiceNoteUrl)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if showError {
@@ -1103,12 +1093,23 @@ struct PendingRequestCard: View {
                                let child = children.first {
                                 let desc = request.description
                                 struct CAI: Encodable { let child_id: String; let title: String; let meta: String; let sf_symbol: String; let jar_color: String; let amount: Double }
-                                try? await supabase.from("child_activity").insert(CAI(child_id: child.id.uuidString, title: "✅ Your deposit request was approved!", meta: desc, sf_symbol: "checkmark.circle.fill", jar_color: "green", amount: request.amount)).execute()
+                                let isSpending = desc.contains("Spending")
+                                let notifTitle = isSpending ? "✅ Spend request approved!" : "✅ Deposit request approved!"
+                                try? await supabase.from("child_activity").insert(CAI(child_id: child.id.uuidString, title: notifTitle, meta: desc, sf_symbol: "checkmark.circle.fill", jar_color: "green", amount: request.amount)).execute()
                                 let jarName: String
                                 if desc.contains("Saving") { jarName = "saving" } else if desc.contains("Giving") { jarName = "giving" } else { jarName = "spending" }
                                 if let jars = try? await supabase.from("jars").select().eq("child_id", value: child.id.uuidString).eq("type", value: jarName).execute().value as [Jar],
                                    let jar = jars.first {
-                                    try? await supabase.from("jars").update(["balance": jar.balance + request.amount]).eq("id", value: jar.id.uuidString).execute()
+                                    // Spending = subtract. Saving/Giving = add.
+                                    if isSpending {
+                                        if jar.balance >= request.amount {
+                                            try? await supabase.from("jars").update(["balance": jar.balance - request.amount]).eq("id", value: jar.id.uuidString).execute()
+                                        } else {
+                                            try? await supabase.from("child_activity").insert(CAI(child_id: child.id.uuidString, title: "❌ Not enough balance in spending jar", meta: desc, sf_symbol: "xmark.circle.fill", jar_color: "red", amount: 0)).execute()
+                                        }
+                                    } else {
+                                        try? await supabase.from("jars").update(["balance": jar.balance + request.amount]).eq("id", value: jar.id.uuidString).execute()
+                                    }
                                 }
                             }
                         }
@@ -1209,4 +1210,3 @@ struct TransactionHistorySection: View {
         .environmentObject(ParentViewModel())
         .environmentObject(AuthViewModel())
 }
-

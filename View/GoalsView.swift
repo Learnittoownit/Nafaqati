@@ -319,7 +319,7 @@ struct GoalsView: View {
     var activeSection: some View {
         VStack(spacing: 20) {
             let activeGoals = goals.filter {
-                $0.status != "rejected" && $0.status != "deleted"
+                $0.status != "rejected" && $0.status != "deleted" && $0.status != "achieved"
             }
 
             if activeGoals.isEmpty {
@@ -472,7 +472,7 @@ struct GoalsView: View {
     // ── History section ───────────────────
     var historySection: some View {
         let historyGoals = goals.filter {
-            $0.status == "rejected" || $0.status == "deleted"
+            $0.status == "rejected" || $0.status == "deleted" || $0.status == "achieved"
         }
 
         return VStack(spacing: 12) {
@@ -538,12 +538,16 @@ struct GoalsView: View {
                     .foregroundColor(Color(hex: "8A9BB0"))
             }
             Spacer()
-            Text(goal.status == "deleted" ? "Deleted" : "Rejected")
+            Text(goal.status == "achieved"
+                 ? "🏆 Achieved"
+                 : goal.status == "deleted"
+                   ? "Deleted"
+                   : "Rejected")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(goal.status == "deleted" ? Color(hex: "555555") : Color(hex: "C62828"))
+                .foregroundColor(goal.status == "achieved" ? Color(hex: "B8860B") : goal.status == "deleted" ? Color(hex: "555555") : Color(hex: "C62828"))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(goal.status == "deleted" ? Color(hex: "EEEEEE") : Color(hex: "FFEBEE"))
+                .background(goal.status == "achieved" ? Color(hex: "FFF8DC") : goal.status == "deleted" ? Color(hex: "EEEEEE") : Color(hex: "FFEBEE"))
                 .cornerRadius(10)
         }
         .padding(16)
@@ -595,19 +599,18 @@ struct GoalsView: View {
                 }
 
                 HStack {
-                    Text("\(Int(goal.saved)) SAR")
-                        .font(.system(
-                            size: 22,
-                            weight: .bold,
-                            design: .rounded))
-                        .foregroundColor(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(Int(goal.saved)) SAR")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("from saving jar")
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
                     Spacer()
                     Text("\(goal.percent)%")
-                        .font(.system(
-                            size: 22,
-                            weight: .bold,
-                            design: .rounded))
-                        .foregroundColor(.white)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(goal.isAchieved ? Color(hex: "FAC775") : .white)
                 }
 
                 GeometryReader { geo in
@@ -616,27 +619,42 @@ struct GoalsView: View {
                             .fill(Color.white.opacity(0.2))
                             .frame(height: 10)
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(hex: "5B9BD5"))
+                            .fill(goal.isAchieved ? Color(hex: "FAC775") : Color(hex: "5B9BD5"))
                             .frame(
-                                width: geo.size.width
-                                * goal.progress,
+                                width: geo.size.width * goal.progress,
                                 height: 10)
                     }
                 }
                 .frame(height: 10)
 
-                HStack {
-                    Text("saved: \(Int(goal.saved))")
-                        .font(.system(
-                            size: 12,
-                            design: .rounded))
-                        .foregroundColor(.white.opacity(0.65))
-                    Spacer()
-                    Text("\(Int(goal.target - goal.saved)) SAR to go!")
-                        .font(.system(
-                            size: 12,
-                            design: .rounded))
-                        .foregroundColor(.white.opacity(0.65))
+                // ── Achievement button when goal is reached
+                if goal.isAchieved {
+                    Button {
+                        Task { await claimGoal(goal) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("🎉")
+                                .font(.system(size: 20))
+                            Text("I achieved my goal! Claim it!")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "1B3A6B"))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: "FAC775"))
+                        .cornerRadius(14)
+                    }
+                    .padding(.top, 4)
+                } else {
+                    HStack {
+                        Text("💰 \(Int(goal.saved)) SAR saved")
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundColor(.white.opacity(0.75))
+                        Spacer()
+                        Text("\(Int(goal.target - goal.saved)) SAR to go!")
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundColor(.white.opacity(0.75))
+                    }
                 }
 
                 MilestoneDots(progress: goal.progress)
@@ -804,6 +822,58 @@ struct GoalsView: View {
         }
     }
 
+    // ── Child claims achieved goal ──────────
+    func claimGoal(_ goal: Goal) async {
+        guard let childIdStr  = UserDefaults.standard.string(forKey: "childId"),
+              let parentIdStr = UserDefaults.standard.string(forKey: "parentId"),
+              let childId     = UUID(uuidString: childIdStr)
+        else { return }
+
+        // 1. Mark goal as "achieved" status in Supabase
+        struct GoalUpdate: Encodable { let status: String; let is_achieved: Bool }
+        try? await supabase.from("goals")
+            .update(GoalUpdate(status: "achieved", is_achieved: true))
+            .eq("id", value: goal.id.uuidString)
+            .execute()
+
+        // 2. Deduct target amount from saving jar
+        if let jars = try? await supabase.from("jars").select()
+            .eq("child_id", value: childId.uuidString)
+            .eq("type", value: "saving")
+            .execute().value as [Jar],
+           let jar = jars.first {
+            let newBalance = max(0, jar.balance - goal.target)
+            try? await supabase.from("jars")
+                .update(["balance": newBalance])
+                .eq("id", value: jar.id.uuidString)
+                .execute()
+        }
+
+        // 3. Log to child activity
+        await logChildActivity(
+            title:    "🏆 Goal achieved: \(goal.name)!",
+            sfSymbol: "star.fill",
+            jarColor: "yellow")
+
+        // 4. Notify parent
+        let cn = UserDefaults.standard.string(forKey: "childName") ?? "Your child"
+        struct PAI: Encodable { let parent_id: String; let title: String; let meta: String }
+        try? await supabase.from("parent_activity")
+            .insert(PAI(parent_id: parentIdStr,
+                        title: "🏆 \(cn) achieved their goal: \(goal.name)!",
+                        meta: "Goal achieved · \(Int(goal.target)) SAR"))
+            .execute()
+
+        // 5. Update local state — move to history and fire confetti
+        await MainActor.run {
+            if let idx = goals.firstIndex(where: { $0.id == goal.id }) {
+                goals[idx].status     = "achieved"
+                goals[idx].isAchieved = true
+            }
+            onGoalAdded() // triggers confetti in ChildTabView
+        }
+    }
+
     // ── Log child activity to Supabase ────
     func logChildActivity(title: String,
                           sfSymbol: String,
@@ -937,4 +1007,3 @@ struct MilestoneDots: View {
         onGoalAdded: {}
     )
 }
-
