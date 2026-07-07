@@ -40,19 +40,6 @@ The application follows the **MVVM (Model–View–ViewModel)** architecture to 
 
 ---
 
-## 🎯 My Role
-
-As the **sole iOS developer**, I was responsible for:
-
-- Building the backend architecture
-- Implementing authentication
-- Developing parent & child user flows
-- Managing real-time synchronization
-- Integrating Supabase services
-- Developing the SwiftUI interface
-
----
-
 ## 🚀 Outcome
 
 - Successfully deployed to **App Store**
